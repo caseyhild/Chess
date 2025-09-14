@@ -1,4 +1,3 @@
-# Chess
-For this project, I implemented the classic strategy board game, chess, using the Java programming language. I designed multiple different algorithms for both playing the game of chess as well as creating a computer opponent to play against.
+Play chess against the computer.
 
-<img width="520" alt="Screenshot 2024-01-03 at 8 20 49 AM" src="https://github.com/caseyhild/Chess/assets/44584719/f4584e73-7445-4171-9404-a6f184199fb1">
+<img width="512" height="514" alt="Screenshot 2025-09-14 at 12 56 50 AM" src="https://github.com/user-attachments/assets/f1c40d80-2dd6-49a4-848b-438b0ea8d29d" />
