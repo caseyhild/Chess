@@ -15,7 +15,6 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
     private final int[] pixels;
 
     private String myColor;
-
     private String turn;
     private int turnsSincePawnMoveOrCapture;
 
