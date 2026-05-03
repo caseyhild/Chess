@@ -36,10 +36,6 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
     private int totalH()    { return contentH(); }
 
     private final Thread thread;
-    // Pixel buffer image — resized lazily when boardSize changes
-    private BufferedImage image;
-    private int[]         pixels;
-    private int           lastBoardSize = -1;
 
     // -------------------------------------------------------------------------
     // Game data
@@ -65,9 +61,8 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
     {
         final Board  boardSnap;
         final String label;
-        final String turnBefore;
         HistoryEntry(Board snap, String label, String turnBefore)
-        { this.boardSnap = snap; this.label = label; this.turnBefore = turnBefore; }
+        { this.boardSnap = snap; this.label = label; }
     }
 
     private final ArrayList<HistoryEntry> history = new ArrayList<>();
@@ -148,15 +143,11 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
     // -------------------------------------------------------------------------
     // Constructor
     // -------------------------------------------------------------------------
+    @SuppressWarnings({"ThisEscapedInObjectConstruction", "CallToThreadStartDuringObjectConstruction"})
     public Chess()
     {
         thread = new Thread(this);
         thread.setDaemon(true);
-
-        // Pixel buffer allocated at default size; resized lazily in render()
-        image  = new BufferedImage(DEFAULT_BOARD, DEFAULT_BOARD, BufferedImage.TYPE_INT_RGB);
-        pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
-        lastBoardSize = DEFAULT_BOARD;
 
         whitePieceColor      = RGB(255, 255, 255);
         blackPieceColor      = RGB(0,   0,   0  );
@@ -171,17 +162,6 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
         kingTexture   = new int[64][64];  readFile(kingTexture,   "saved-textures/king.txt");
 
         ai = new AI();
-
-        addMouseListener(this);
-        addMouseMotionListener(this);
-        addMouseWheelListener(e -> {
-            if (mouseX >= boardSize())
-            {
-                int totalPairs = Math.max(0, (history.size() - 1 + 1) / 2);
-                moveListScrollOffset += e.getWheelRotation();
-                moveListScrollOffset = Math.max(0, Math.min(moveListScrollOffset, Math.max(0, totalPairs - 1)));
-            }
-        });
 
         // Aspect ratio snap on resize-end.
         // Track size at drag-start so we can tell which dimension changed more.
@@ -294,6 +274,18 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
         });
         setLocationRelativeTo(null);
         setVisible(true);
+
+        // Register listeners after setVisible so 'this' is fully constructed
+        addMouseListener(this);
+        addMouseMotionListener(this);
+        addMouseWheelListener(e -> {
+            if (mouseX >= boardSize())
+            {
+                int totalPairs = Math.max(0, (history.size() - 1 + 1) / 2);
+                moveListScrollOffset += e.getWheelRotation();
+                moveListScrollOffset = Math.max(0, Math.min(moveListScrollOffset, Math.max(0, totalPairs - 1)));
+            }
+        });
 
         // Now insets are known — set the exact correct initial size
         Insets ins = getInsets();
@@ -436,8 +428,6 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
             return;
         }
 
-        int bs = boardSize();
-
         if (turn.equals(myColor))
         {
             selectedLocationMoves.clear();
@@ -482,15 +472,6 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
     // -------------------------------------------------------------------------
     private void render()
     {
-        // Resize pixel buffer if boardSize changed
-        int bs = boardSize();
-        if (bs != lastBoardSize && bs > 0)
-        {
-            image  = new BufferedImage(bs, bs, BufferedImage.TYPE_INT_RGB);
-            pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
-            lastBoardSize = bs;
-        }
-
         // Recreate buffer strategy if needed (happens after resize)
         BufferStrategy strat = getBufferStrategy();
         if (strat == null) { createBufferStrategy(2); return; }
@@ -510,9 +491,9 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
 
                     switch (state)
                     {
-                        case START:     renderStart(g);    break;
-                        case PLAYING:   renderGame(g);     break;
-                        case GAME_OVER: renderGameOver(g); break;
+                        case START -> renderStart(g);
+                        case PLAYING -> renderGame(g);
+                        case GAME_OVER -> renderGameOver(g);
                     }
                 }
                 finally { g.dispose(); }
@@ -619,9 +600,10 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
         }
 
         // Move highlights
-        if (!reviewing && selectedRow != -1 && selectedCol != -1)
+        if (selectedRow != -1 && selectedCol != -1)
         {
-            if (turn.equals(myColor))
+            // Green move dots — only on the live position during the player's turn
+            if (!reviewing && turn.equals(myColor))
             {
                 g.setColor(new Color(0, 200, 0, 180));
                 for (Move move : selectedLocationMoves)
@@ -700,24 +682,31 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
 
         // Header — font sized to fit "Move History" within the available panel width
         int headerH = Math.max(20, H / 26);
-        // Start with a size proportional to panel width, shrink until text fits
+
+        // Small "Play Again" button in header (drawn first so we know its width)
+        boolean showHeaderBtn = state == GameState.GAME_OVER
+                && (viewIndex < history.size() - 1 || !showGameOverOverlay);
+        int nbw = 0;
+        if (showHeaderBtn)
+        {
+            nbw = Math.min(pw * 45 / 100, Math.max(50, pw / 3));
+            int nbh = headerH - 4;
+            Rectangle btnNewGame = new Rectangle(px + pw - nbw - 4, 2, nbw, nbh);
+            drawSmallButton(g, btnNewGame, "Play Again", new Color(60, 160, 60), Color.WHITE);
+            btnPlayAgain = btnNewGame;
+        }
+
+        // "Move History" label — constrained to not overlap the button
+        int textMaxW = pw - nbw - pw / 10 - (showHeaderBtn ? 8 : 0);
         int headerFont = Math.max(8, pw / 10);
         while (headerFont > 8)
         {
             g.setFont(new Font("SansSerif", Font.BOLD, headerFont));
-            if (g.getFontMetrics().stringWidth("Move History") <= pw * 55 / 100) break;
+            if (g.getFontMetrics().stringWidth("Move History") <= textMaxW) break;
             headerFont--;
         }
+        g.setColor(new Color(200, 200, 200));
         g.drawString("Move History", px + pw / 20, headerH * 3 / 4);
-
-        // Small "Play Again" button in header
-        if (state == GameState.GAME_OVER && (viewIndex < history.size() - 1 || !showGameOverOverlay))
-        {
-            int nbw = pw * 55 / 100, nbh = headerH - 4;
-            Rectangle btnNewGame = new Rectangle(px + pw - nbw - pw / 20, 2, nbw, nbh);
-            drawSmallButton(g, btnNewGame, "Play Again", new Color(60, 160, 60), Color.WHITE);
-            btnPlayAgain = btnNewGame;
-        }
 
         g.setColor(new Color(70, 70, 70));
         g.drawLine(px, headerH, px + pw, headerH);
@@ -732,10 +721,8 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
         boolean canPrev = history.size() > 1 && viewIndex > 0;
         boolean canNext = viewIndex < history.size() - 1;
 
-        drawButton(g, btnPrev, "\u25c4", canPrev ? new Color(60, 60, 80) : new Color(40, 40, 40),
-                   canPrev ? Color.WHITE : new Color(90, 90, 90));
-        drawButton(g, btnNext, "\u25ba", canNext ? new Color(60, 60, 80) : new Color(40, 40, 40),
-                   canNext ? Color.WHITE : new Color(90, 90, 90));
+        drawNavButton(g, btnPrev, false, canPrev);
+        drawNavButton(g, btnNext, true,  canNext);
 
         // Move list
         int listTop    = headerH + 4;
@@ -834,6 +821,16 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
                     Piece p = displaySnap.getPiece(row, col);
                     if (p != null) drawPieceGraphics(g, p.type, p.color, sqX(col, bs), sqY(row, bs), sqW(col, bs));
                 }
+
+        // Yellow selection highlight
+        if (selectedRow != -1 && selectedCol != -1)
+        {
+            g.setColor(new Color(255, 220, 0));
+            int sx = sqX(selectedCol, bs), sy = sqY(selectedRow, bs);
+            int sw = sqW(selectedCol, bs), sh = sqH(selectedRow, bs);
+            for (int t = 0; t < 3; t++)
+                g.drawRect(sx + t, sy + t, sw - 2*t, sh - 2*t);
+        }
 
         renderSidePanel(g);
 
@@ -936,6 +933,47 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
     }
 
     // -------------------------------------------------------------------------
+    // Nav button helper — draws a prev (◀) or next (▶) button with a
+    // pixel-drawn triangle so both arrows are exactly the same size.
+    // -------------------------------------------------------------------------
+    private void drawNavButton(Graphics g, Rectangle r, boolean pointRight, boolean active)
+    {
+        Color bg   = active ? new Color(60, 60, 80) : new Color(40, 40, 40);
+        Color fg   = active ? Color.WHITE            : new Color(90, 90, 90);
+        boolean hovered = active && r.contains(mouseX, mouseY);
+        Color fill = hovered ? bg.darker() : bg;
+        int arc = Math.max(6, r.height / 4);
+
+        // Button background
+        g.setColor(new Color(0, 0, 0, 80));
+        g.fillRoundRect(r.x + 2, r.y + 2, r.width, r.height, arc, arc);
+        g.setColor(fill);
+        g.fillRoundRect(r.x, r.y, r.width, r.height, arc, arc);
+        g.setColor(new Color(255, 255, 255, 40));
+        g.drawRoundRect(r.x, r.y, r.width, r.height, arc, arc);
+
+        // Triangle — sized as a fixed fraction of the button
+        int tw = r.width  * 20 / 100;  // triangle width
+        int th = r.height * 40 / 100;  // triangle height
+        int cx = r.x + r.width  / 2;
+        int cy = r.y + r.height / 2;
+
+        int[] xs, ys;
+        if (pointRight)
+        {
+            xs = new int[]{ cx - tw/2, cx - tw/2, cx + tw/2 };
+            ys = new int[]{ cy - th/2, cy + th/2, cy };
+        }
+        else
+        {
+            xs = new int[]{ cx + tw/2, cx + tw/2, cx - tw/2 };
+            ys = new int[]{ cy - th/2, cy + th/2, cy };
+        }
+        g.setColor(fg);
+        g.fillPolygon(xs, ys, 3);
+    }
+
+    // -------------------------------------------------------------------------
     // Mouse click routing
     // -------------------------------------------------------------------------
     private void handleClick(int x, int y)
@@ -981,7 +1019,17 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
             else if (btnPlayAgain != null && btnPlayAgain.contains(x, y))
             { state = GameState.START; }
             else if (x < boardSize())
-            { showGameOverOverlay = false; }
+            {
+                // Hide overlay AND allow square selection
+                showGameOverOverlay = false;
+                int bs = boardSize();
+                int newRow = y * 8 / bs;
+                int newCol = x * 8 / bs;
+                if (newRow == selectedRow && newCol == selectedCol)
+                { selectedRow = -1; selectedCol = -1; }
+                else
+                { selectedRow = newRow; selectedCol = newCol; }
+            }
         }
         else if (state == GameState.PLAYING)
         {
@@ -995,9 +1043,9 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
                 int newRow = y * 8 / bs;
                 int newCol = x * 8 / bs;
 
-                // If it's the player's turn, check if the clicked square is a legal move
+                // If it's the player's turn on the live position, check for a legal move
                 boolean reviewing = !history.isEmpty() && viewIndex < history.size() - 1;
-                if (!reviewing && turn.equals(myColor) && state == GameState.PLAYING)
+                if (!reviewing && turn.equals(myColor))
                 {
                     Move m = null;
                     for (Move move : selectedLocationMoves)
@@ -1015,7 +1063,7 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
                     }
                 }
 
-                // Not a move destination — update selection
+                // Update selection (works during live play, AI turn, and history review)
                 if (newRow == selectedRow && newCol == selectedCol)
                 { selectedRow = -1; selectedCol = -1; }
                 else
@@ -1028,22 +1076,27 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
     // -------------------------------------------------------------------------
     // Draw a piece texture directly onto a Graphics context
     // -------------------------------------------------------------------------
+    @SuppressWarnings("MismatchedReadAndWriteOfArray")
     private void drawPieceGraphics(Graphics g, String texture, String color, int xStart, int yStart, int size)
     {
         int[][] tex;
         switch (texture)
         {
-            case "pawn":   tex = pawnTexture;   break;
-            case "knight": tex = knightTexture; break;
-            case "bishop": tex = bishopTexture; break;
-            case "rook":   tex = rookTexture;   break;
-            case "queen":  tex = queenTexture;  break;
-            case "king":   tex = kingTexture;   break;
-            default: return;
+            case "pawn" -> tex = pawnTexture;
+            case "knight" -> tex = knightTexture;
+            case "bishop" -> tex = bishopTexture;
+            case "rook" -> tex = rookTexture;
+            case "queen" -> tex = queenTexture;
+            case "king" -> tex = kingTexture;
+            default -> {
+                return;
+            }
         }
         BufferedImage pieceImg = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
         int[] pix = ((DataBufferInt) pieceImg.getRaster().getDataBuffer()).getData();
-        int pieceColor = color.equals("white") ? 0xFFFFFFFF : 0xFF000000;
+        int pieceColor = color.equals("white")
+                ? (0xFF000000 | whitePieceColor)
+                : (0xFF000000 | blackPieceColor);
         for (int py = 0; py < size; py++)
             for (int px = 0; px < size; px++)
             {
@@ -1173,11 +1226,11 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
         String piece = "";
         switch (p.type)
         {
-            case "knight": piece = "N"; break;
-            case "bishop": piece = "B"; break;
-            case "rook":   piece = "R"; break;
-            case "queen":  piece = "Q"; break;
-            case "king":   piece = "K"; break;
+            case "knight" -> piece = "N";
+            case "bishop" -> piece = "B";
+            case "rook" -> piece = "R";
+            case "queen" -> piece = "Q";
+            case "king" -> piece = "K";
         }
         boolean capture = board.getPiece(m.endRow, m.endCol) != null;
         String from = (p.type.equals("pawn") && capture) ? String.valueOf((char)('a' + m.startCol)) : "";
@@ -1196,20 +1249,19 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
         char file = (char)('a' + m.endCol);
         int  rank = 8 - m.endRow;
         String promoChar;
-        switch (promotedType)
-        {
-            case "rook":   promoChar = "=R"; break;
-            case "bishop": promoChar = "=B"; break;
-            case "knight": promoChar = "=N"; break;
-            default:       promoChar = "=Q"; break;
-        }
+        promoChar = switch (promotedType) {
+            case "rook" -> "=R";
+            case "bishop" -> "=B";
+            case "knight" -> "=N";
+            default -> "=Q";
+        };
         return from + captureStr + file + rank + promoChar;
     }
 
     // -------------------------------------------------------------------------
     // File reader for textures
     // -------------------------------------------------------------------------
-    public void readFile(int[][] array, String fileLoc)
+    private void readFile(int[][] array, String fileLoc)
     {
         File f = new File(fileLoc);
         if (!f.exists())

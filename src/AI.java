@@ -230,27 +230,25 @@ public class AI
         int row = p.color.equals(currentColor) ? p.row : 7 - p.row;
         // row 6 = home, row 0 = promotion
         // Bonus: 0 at rows 6-4, then escalating
-        switch (row)
-        {
-            case 3: return 20;
-            case 2: return 60;
-            case 1: return 150;  // one step from queening — very valuable
-            default: return 0;
-        }
+        return switch (row) {
+            case 3 -> 20;
+            case 2 -> 60;
+            case 1 -> 150;
+            default -> 0;
+        }; // one step from queening — very valuable
     }
 
     private int materialValue(String type)
     {
-        switch(type)
-        {
-            case "pawn":   return PAWN_VALUE;
-            case "knight": return KNIGHT_VALUE;
-            case "bishop": return BISHOP_VALUE;
-            case "rook":   return ROOK_VALUE;
-            case "queen":  return QUEEN_VALUE;
-            case "king":   return KING_VALUE;
-            default:       return 0;
-        }
+        return switch (type) {
+            case "pawn" -> PAWN_VALUE;
+            case "knight" -> KNIGHT_VALUE;
+            case "bishop" -> BISHOP_VALUE;
+            case "rook" -> ROOK_VALUE;
+            case "queen" -> QUEEN_VALUE;
+            case "king" -> KING_VALUE;
+            default -> 0;
+        };
     }
 
     /**
@@ -270,16 +268,15 @@ public class AI
         if(!p.color.equals(currentColor))
             tableRow = 7 - tableRow;
 
-        switch(p.type)
-        {
-            case "pawn":   return PAWN_TABLE[tableRow][tableCol];
-            case "knight": return KNIGHT_TABLE[tableRow][tableCol];
-            case "bishop": return BISHOP_TABLE[tableRow][tableCol];
-            case "rook":   return ROOK_TABLE[tableRow][tableCol];
-            case "queen":  return QUEEN_TABLE[tableRow][tableCol];
-            case "king":   return KING_MIDDLE_TABLE[tableRow][tableCol];
-            default:       return 0;
-        }
+        return switch (p.type) {
+            case "pawn" -> PAWN_TABLE[tableRow][tableCol];
+            case "knight" -> KNIGHT_TABLE[tableRow][tableCol];
+            case "bishop" -> BISHOP_TABLE[tableRow][tableCol];
+            case "rook" -> ROOK_TABLE[tableRow][tableCol];
+            case "queen" -> QUEEN_TABLE[tableRow][tableCol];
+            case "king" -> KING_MIDDLE_TABLE[tableRow][tableCol];
+            default -> 0;
+        };
     }
 
     /**

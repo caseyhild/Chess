@@ -13,6 +13,7 @@ public class Move
         endCol = ec;
     }
     
+    @Override
     public String toString()
     {
         return "(" + startRow + "," + startCol + ")->(" + endRow + "," + endCol + ")";

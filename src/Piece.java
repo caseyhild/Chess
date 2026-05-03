@@ -10,30 +10,15 @@ public class Piece
         this.row = row;
         this.col = col;
         this.color = color;
-        switch(value)
-        {
-            case 1:
-            type = "pawn";
-            break;
-            case 2:
-            type = "knight";
-            break;
-            case 3:
-            type = "bishop";
-            break;
-            case 4:
-            type = "rook";
-            break;
-            case 5:
-            type = "queen";
-            break;
-            case 6:
-            type = "king";
-            break;
-            default:
-            type = "";
-            break;
-        }
+        type = switch (value) {
+            case 1 -> "pawn";
+            case 2 -> "knight";
+            case 3 -> "bishop";
+            case 4 -> "rook";
+            case 5 -> "queen";
+            case 6 -> "king";
+            default -> "";
+        };
     }
 
     public Piece(int row, int col)
@@ -53,6 +38,7 @@ public class Piece
         return row == p.row && col == p.col;
     }
 
+    @Override
     public String toString()
     {
         return row + " " + col + " " + color + " " + type;
