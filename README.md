@@ -1,5 +1,5 @@
 # Chess
 
-Play chess against the computer.
+Play chess against against a simple AI.
 
-<img width="512" height="544" alt="Screenshot 2026-05-02 at 8 19 29 PM" src="https://github.com/user-attachments/assets/adc8eddd-1ce0-4bc6-864c-f7fa3d102a47" />
+<img width="1000" alt="Screenshot 2026-05-03 at 12 29 10 AM" src="https://github.com/user-attachments/assets/034758d6-0645-4f99-b894-9643d0401b9c" />
