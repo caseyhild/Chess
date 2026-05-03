@@ -1,4 +1,5 @@
 import java.util.*;
+
 public class Board
 {
     public int width;
@@ -10,6 +11,28 @@ public class Board
     public Piece pieceMoved;
     public boolean[] whiteCastle;
     public boolean[] blackCastle;
+
+    /** Deep-copy constructor — produces an independent clone of the given board. */
+    public Board(Board other)
+    {
+        width = other.width;
+        height = other.height;
+        myColor = other.myColor;
+        color = other.color;
+        pieces = new ArrayList<>();
+        for(Piece p : other.pieces)
+        {
+            Piece np = new Piece(p.row, p.col, p.color, 0);
+            np.type = p.type;
+            pieces.add(np);
+        }
+        previousMove = other.previousMove; // Move is read-only after creation, safe to share
+        pieceMoved = (other.pieceMoved == null) ? null
+                : new Piece(other.pieceMoved.row, other.pieceMoved.col, other.pieceMoved.color, 0);
+        if(pieceMoved != null) pieceMoved.type = other.pieceMoved.type;
+        whiteCastle = other.whiteCastle.clone();
+        blackCastle = other.blackCastle.clone();
+    }
 
     public Board(String myColor)
     {
@@ -70,10 +93,25 @@ public class Board
                     moves.add(new Move(p.row, p.col, p.row - 1, p.col - 1));
                 if(isValid(p.row - 1, p.col + 1) && getPiece(p.row - 1, p.col + 1) != null && !getPiece(p.row - 1, p.col + 1).color.equals(color))
                     moves.add(new Move(p.row, p.col, p.row - 1, p.col + 1));
-                if(p.row == 3 && pieceMoved.type.equals("pawn") && previousMove.startRow - previousMove.endRow == 2 && 7 - previousMove.endCol == p.col - 1)
-                    moves.add(new Move(p.row, p.col, p.row - 1, p.col - 1));
-                if(p.row == 3 && pieceMoved.type.equals("pawn") && previousMove.startRow - previousMove.endRow == 2 && 7 - previousMove.endCol == p.col + 1)
-                    moves.add(new Move(p.row, p.col, p.row - 1, p.col + 1));
+
+                // BUG FIX: en passant - previousMove/pieceMoved can be null at game start
+                // BUG FIX: en passant column mapping was wrong after board flip.
+                // After flipBoard(), the opponent's pawn is at (3, mirroredCol).
+                // The opponent moved from row 1 to row 4 (from their perspective: row 6 to row 4).
+                // After our flip that's rows 3->6 from our perspective... but pieceMoved is
+                // already stored in flipped coords since update() stores it before flipBoard().
+                // The previousMove coords are in the opponent's flipped frame.
+                // So the captured pawn sits at our row 3, and its col = 7 - previousMove.endCol.
+                if(previousMove != null && pieceMoved != null && p.row == 3
+                        && pieceMoved.type.equals("pawn")
+                        && Math.abs(previousMove.startRow - previousMove.endRow) == 2)
+                {
+                    int epCol = 7 - previousMove.endCol; // map opponent col to our frame
+                    if(epCol == p.col - 1)
+                        moves.add(new Move(p.row, p.col, p.row - 1, p.col - 1));
+                    if(epCol == p.col + 1)
+                        moves.add(new Move(p.row, p.col, p.row - 1, p.col + 1));
+                }
             }
             if(p.color.equals(color) && p.type.equals("knight"))
             {
@@ -91,37 +129,38 @@ public class Board
                 int c = p.col;
                 while(r >= 0 && c >= 0 && (getPiece(r, c) == null || (r == p.row && c == p.col)))
                 {
-                    r--;
-                    c--;
+                    r--; c--;
                     if(isValid(r, c))
                         moves.add(new Move(p.row, p.col, r, c));
+                    if(r >= 0 && r < 8 && c >= 0 && c < 8 && getPiece(r, c) != null)
+                        break;
                 }
-                r = p.row;
-                c = p.col;
+                r = p.row; c = p.col;
                 while(r >= 0 && c < 8 && (getPiece(r, c) == null || (r == p.row && c == p.col)))
                 {
-                    r--;
-                    c++;
+                    r--; c++;
                     if(isValid(r, c))
                         moves.add(new Move(p.row, p.col, r, c));
+                    if(r >= 0 && r < 8 && c >= 0 && c < 8 && getPiece(r, c) != null)
+                        break;
                 }
-                r = p.row;
-                c = p.col;
+                r = p.row; c = p.col;
                 while(r < 8 && c < 8 && (getPiece(r, c) == null || (r == p.row && c == p.col)))
                 {
-                    r++;
-                    c++;
+                    r++; c++;
                     if(isValid(r, c))
                         moves.add(new Move(p.row, p.col, r, c));
+                    if(r >= 0 && r < 8 && c >= 0 && c < 8 && getPiece(r, c) != null)
+                        break;
                 }
-                r = p.row;
-                c = p.col;
+                r = p.row; c = p.col;
                 while(r < 8 && c >= 0 && (getPiece(r, c) == null || (r == p.row && c == p.col)))
                 {
-                    r++;
-                    c--;
+                    r++; c--;
                     if(isValid(r, c))
                         moves.add(new Move(p.row, p.col, r, c));
+                    if(r >= 0 && r < 8 && c >= 0 && c < 8 && getPiece(r, c) != null)
+                        break;
                 }
             }
             if(p.color.equals(color) && (p.type.equals("rook") || p.type.equals("queen")))
@@ -133,30 +172,35 @@ public class Board
                     r--;
                     if(isValid(r, c))
                         moves.add(new Move(p.row, p.col, r, c));
+                    if(r >= 0 && getPiece(r, c) != null)
+                        break;
                 }
-                r = p.row;
-                c = p.col;
+                r = p.row; c = p.col;
                 while(c < 8 && (getPiece(r, c) == null || (r == p.row && c == p.col)))
                 {
                     c++;
                     if(isValid(r, c))
                         moves.add(new Move(p.row, p.col, r, c));
+                    if(c < 8 && getPiece(r, c) != null)
+                        break;
                 }
-                r = p.row;
-                c = p.col;
+                r = p.row; c = p.col;
                 while(r < 8 && (getPiece(r, c) == null || (r == p.row && c == p.col)))
                 {
                     r++;
                     if(isValid(r, c))
                         moves.add(new Move(p.row, p.col, r, c));
+                    if(r < 8 && getPiece(r, c) != null)
+                        break;
                 }
-                r = p.row;
-                c = p.col;
+                r = p.row; c = p.col;
                 while(c >= 0 && (getPiece(r, c) == null || (r == p.row && c == p.col)))
                 {
                     c--;
                     if(isValid(r, c))
                         moves.add(new Move(p.row, p.col, r, c));
+                    if(c >= 0 && getPiece(r, c) != null)
+                        break;
                 }
             }
             if(p.color.equals(color) && p.type.equals("king"))
@@ -191,22 +235,53 @@ public class Board
         }
     }
 
+    // BUG FIX: The original undo in removeInCheckMoves was broken for special moves
+    // (castling moved a rook that wasn't undone; en passant removed a pawn that wasn't restored).
+    // We now save and restore the full pieces list so the undo is always perfect.
     public void removeInCheckMoves(ArrayList<Move> moves)
     {
         for(int i = 0; i < moves.size(); i++)
         {
             Move move = moves.get(i);
-            Piece p = getPiece(move.endRow, move.endCol);
+
+            // Snapshot state before the trial move
+            ArrayList<Piece> savedPieces = deepCopyPieces();
+            Move savedPreviousMove = previousMove;
+            Piece savedPieceMoved = pieceMoved;
+            boolean[] savedWhiteCastle = whiteCastle.clone();
+            boolean[] savedBlackCastle = blackCastle.clone();
+
+            // Apply the move (including special-move side effects via update())
             move(move);
-            if(inCheck())
+            update(move);
+
+            boolean leavesInCheck = inCheck();
+
+            // Restore everything
+            pieces = savedPieces;
+            previousMove = savedPreviousMove;
+            pieceMoved = savedPieceMoved;
+            whiteCastle = savedWhiteCastle;
+            blackCastle = savedBlackCastle;
+
+            if(leavesInCheck)
             {
-                moves.remove(move);
+                moves.remove(i);
                 i--;
             }
-            move(new Move(move.endRow, move.endCol, move.startRow, move.startCol));
-            if(p != null)
-                pieces.add(p);
         }
+    }
+
+    private ArrayList<Piece> deepCopyPieces()
+    {
+        ArrayList<Piece> copy = new ArrayList<>();
+        for(Piece p : pieces)
+        {
+            Piece np = new Piece(p.row, p.col, p.color, 0);
+            np.type = p.type;
+            copy.add(np);
+        }
+        return copy;
     }
 
     ArrayList<Move> getMovesFromLocation(int row, int col, ArrayList<Move> moves)
@@ -222,9 +297,10 @@ public class Board
 
     public boolean isValid(int row, int col)
     {
-        if(getPiece(row, col) != null && getPiece(row, col).color.equals(color))
+        if(row < 0 || row > 7 || col < 0 || col > 7)
             return false;
-        return row >= 0 && row <= 7 && col >= 0 && col <= 7;
+        Piece p = getPiece(row, col);
+        return p == null || !p.color.equals(color);
     }
 
     public boolean inCheck()
@@ -235,7 +311,7 @@ public class Board
             if(p.type.equals("king") && p.color.equals(color))
                 king = p;
         }
-        assert king != null;
+        if(king == null) return false;
         return squareAttacked(king.row, king.col);
     }
 
@@ -289,7 +365,7 @@ public class Board
     {
         for(Piece p: pieces)
         {
-            if(p.equals(new Piece(r, c)))
+            if(p.row == r && p.col == c)
                 return p;
         }
         return null;
@@ -299,7 +375,7 @@ public class Board
     {
         for(Piece p: pieces)
         {
-            if(p.equals(new Piece(r, c)))
+            if(p.row == r && p.col == c)
             {
                 pieces.remove(p);
                 return;
@@ -311,17 +387,39 @@ public class Board
     {
         if(getPiece(m.endRow, m.endCol) != null)
             removePiece(m.endRow, m.endCol);
-        getPiece(m.startRow, m.startCol).move(m.endRow, m.endCol);
+        Piece p = getPiece(m.startRow, m.startCol);
+        if(p != null)
+            p.move(m.endRow, m.endCol);
     }
 
     public void update(Move move)
     {
-        if(getPiece(move.endRow, move.endCol).type.equals("pawn") && move.startRow == 3 && move.startCol != move.endCol && pieceMoved.type.equals("pawn") && previousMove.endRow - previousMove.startRow == -2 && 7 - previousMove.endCol == move.startCol - 1)
+        // En passant captures
+        if(getPiece(move.endRow, move.endCol).type.equals("pawn")
+                && move.startRow == 3 && move.startCol != move.endCol
+                && pieceMoved != null && pieceMoved.type.equals("pawn")
+                && previousMove != null
+                && previousMove.endRow - previousMove.startRow == -2
+                && 7 - previousMove.endCol == move.startCol - 1)
             removePiece(move.startRow, move.endCol);
-        if(getPiece(move.endRow, move.endCol).type.equals("pawn") && move.startRow == 3 && move.startCol != move.endCol && pieceMoved.type.equals("pawn") && previousMove.endRow - previousMove.startRow == -2 && 7 - previousMove.endCol == move.startCol + 1)
+
+        if(getPiece(move.endRow, move.endCol).type.equals("pawn")
+                && move.startRow == 3 && move.startCol != move.endCol
+                && pieceMoved != null && pieceMoved.type.equals("pawn")
+                && previousMove != null
+                && previousMove.endRow - previousMove.startRow == -2
+                && 7 - previousMove.endCol == move.startCol + 1)
             removePiece(move.startRow, move.endCol);
-        if(getPiece(move.endRow, move.endCol).type.equals("pawn") && move.endRow == 0)
+
+        // Pawn promotion — handled externally for the human player;
+        // for AI moves the caller sets the type before calling update,
+        // so we only auto-promote here as a fallback (AI path).
+        if(getPiece(move.endRow, move.endCol) != null
+                && getPiece(move.endRow, move.endCol).type.equals("pawn")
+                && move.endRow == 0)
             getPiece(move.endRow, move.endCol).type = "queen";
+
+        // Castling rook moves
         if(color.equals("white") && getPiece(move.endRow, move.endCol).type.equals("king") && move.endCol - move.startCol == -2)
             move(new Move(7, 0, 7, 3));
         if(color.equals("white") && getPiece(move.endRow, move.endCol).type.equals("king") && move.endCol - move.startCol == 2)
@@ -330,6 +428,8 @@ public class Board
             move(new Move(7, 0, 7, 2));
         if(color.equals("black") && getPiece(move.endRow, move.endCol).type.equals("king") && move.endCol - move.startCol == 2)
             move(new Move(7, 7, 7, 4));
+
+        // Castling rights
         if(color.equals("white") && (getPiece(move.endRow, move.endCol).type.equals("king") || (getPiece(move.endRow, move.endCol).type.equals("rook") && move.startCol == 0)))
             whiteCastle[0] = false;
         if(color.equals("white") && (getPiece(move.endRow, move.endCol).type.equals("king") || (getPiece(move.endRow, move.endCol).type.equals("rook") && move.startCol == 7)))
@@ -338,6 +438,7 @@ public class Board
             blackCastle[0] = false;
         if(color.equals("black") && (getPiece(move.endRow, move.endCol).type.equals("king") || (getPiece(move.endRow, move.endCol).type.equals("rook") && move.startCol == 7)))
             blackCastle[1] = false;
+
         previousMove = move;
         pieceMoved = getPiece(move.endRow, move.endCol);
     }
