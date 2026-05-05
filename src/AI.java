@@ -10,7 +10,7 @@ import java.util.*;
  */
 public class AI
 {
-    private static final int DEPTH = 3;
+    private static final int DEPTH = 4;
     private static final int RANDOM_MARGIN = 30; // centipawns — moves within this of best are equally eligible
     private final Random random = new Random();
 

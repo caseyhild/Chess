@@ -385,10 +385,15 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
                 animMove = null;
                 finishAnimatedMove(m);
             }
-            // Block all input during animation
-            if (mouseClicked) mouseClicked = false;
-            if (mousePressed) mousePressed = false;
-            return;
+            else
+            {
+                // Allow selection during animation, but block move execution
+                // Mouse clicks are handled by handleClick() which updates selectedRow/selectedCol
+                // We just need to clear the flags at the end so they don't carry over
+                if (mouseClicked) mouseClicked = false;
+                if (mousePressed) mousePressed = false;
+                return;
+            }
         }
 
         if (pendingPromotionMove != null)
@@ -1037,15 +1042,16 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
             { if (viewIndex > 0) viewIndex--; mouseClicked = false; }
             else if (btnNext != null && btnNext.contains(x, y))
             { if (viewIndex < history.size() - 1) viewIndex++; mouseClicked = false; }
-            else if (x < boardSize() && animMove == null)
+            else if (x < boardSize())
             {
                 int bs = boardSize();
                 int newRow = y * 8 / bs;
                 int newCol = x * 8 / bs;
 
                 // If it's the player's turn on the live position, check for a legal move
+                // Only allow move execution when no animation is playing
                 boolean reviewing = !history.isEmpty() && viewIndex < history.size() - 1;
-                if (!reviewing && turn.equals(myColor))
+                if (!reviewing && turn.equals(myColor) && animMove == null)
                 {
                     Move m = null;
                     for (Move move : selectedLocationMoves)
