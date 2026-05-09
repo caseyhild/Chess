@@ -1269,29 +1269,99 @@ public class Chess extends JFrame implements Runnable, MouseListener, MouseMotio
     // -------------------------------------------------------------------------
     private void readFile(int[][] array, String fileLoc)
     {
-        File f = new File(fileLoc);
-        if (!f.exists())
+        java.io.InputStream is = null;
+        
+        // Method 1: Try to load from JAR resources
+        is = getClass().getClassLoader().getResourceAsStream(fileLoc);
+        
+        // Method 2: Try as a regular file (for development)
+        if (is == null)
         {
-            String classPath = Chess.class.getProtectionDomain().getCodeSource().getLocation().getPath();
-            File classDir = new File(classPath).getParentFile();
-            File candidate = new File(classDir, fileLoc);
-            if (!candidate.exists()) candidate = new File(classDir.getParentFile(), fileLoc);
-            if (candidate.exists()) f = candidate;
+            File f = new File(fileLoc);
+            if (!f.exists())
+            {
+                String classPath = Chess.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+                File classDir = new File(classPath).getParentFile();
+                File candidate = new File(classDir, fileLoc);
+                if (!candidate.exists()) candidate = new File(classDir.getParentFile(), fileLoc);
+                if (candidate.exists()) f = candidate;
+            }
+            if (f.exists())
+            {
+                try
+                {
+                    is = new java.io.FileInputStream(f);
+                }
+                catch (IOException e)
+                {
+                    System.err.println("Could not open file: " + fileLoc);
+                }
+            }
         }
-        try (Scanner file = new Scanner(f))
+        
+        // Method 3: Extract from JAR to temp location if still not found
+        if (is == null)
+        {
+            if (extractResourceFromJar(fileLoc))
+            {
+                try
+                {
+                    is = new java.io.FileInputStream(new File(fileLoc));
+                }
+                catch (IOException e)
+                {
+                    System.err.println("Could not read extracted texture: " + fileLoc);
+                }
+            }
+        }
+        
+        if (is == null)
+        {
+            System.err.println("Could not load texture from any source: " + fileLoc);
+            return;
+        }
+        
+        // Read from the input stream (works for both JAR resources and files)
+        try (Scanner scanner = new Scanner(is))
         {
             for (int y = 0; y < 64; y++)
             {
-                if (!file.hasNextLine()) break;
-                String line = file.nextLine();
+                if (!scanner.hasNextLine()) break;
+                String line = scanner.nextLine();
                 for (int x = 0; x < 64 && x < line.length(); x++)
                     array[y][x] = line.charAt(x);
             }
         }
-        catch (IOException e)
+        catch (Exception e)
         {
-            System.err.println("Could not load texture: " + fileLoc + " (" + f.getAbsolutePath() + ")");
+            System.err.println("Error reading texture: " + fileLoc);
+            e.printStackTrace();
         }
+    }
+    
+    private boolean extractResourceFromJar(String resourcePath)
+    {
+        try
+        {
+            java.io.InputStream in = getClass().getClassLoader().getResourceAsStream(resourcePath);
+            if (in != null)
+            {
+                java.io.File outFile = new java.io.File(resourcePath);
+                outFile.getParentFile().mkdirs();
+                java.io.FileOutputStream out = new java.io.FileOutputStream(outFile);
+                byte[] buffer = new byte[1024];
+                int bytesRead;
+                while ((bytesRead = in.read(buffer)) != -1)
+                {
+                    out.write(buffer, 0, bytesRead);
+                }
+                in.close();
+                out.close();
+                return true;
+            }
+        }
+        catch (Exception ignored) {}
+        return false;
     }
 
     // -------------------------------------------------------------------------
